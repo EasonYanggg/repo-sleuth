@@ -10,5 +10,53 @@
     "issue": "订单金额正好为 100 时仍收取运费，但业务规则是满 100 免运费。请定位原因。",
     "expected_citations": ["[shipping.py:3]"],
     "expected_terms": ["100", "大于"]
+  },
+  {
+    "id": "mutable_default",
+    "issue": "第二次 add_tag 调用包含第一次的标签，为什么？",
+    "expected_citations": ["[cache.py:1]"],
+    "expected_terms": ["默认", "共享"]
+  },
+  {
+    "id": "pagination",
+    "issue": "page(items, 0, 10) 只返回 9 个元素，为什么？",
+    "expected_citations": ["[pagination.py:3]"],
+    "expected_terms": ["切片", "少一个"]
+  },
+  {
+    "id": "authorization",
+    "issue": "非管理员但 active=True 的用户能够访问管理页，为什么？",
+    "expected_citations": ["[auth.py:3]"],
+    "expected_terms": ["and", "放行"]
+  },
+  {
+    "id": "retry",
+    "issue": "max_attempts=3 时循环执行了 4 次，为什么？",
+    "expected_citations": ["[retry.py:4]"],
+    "expected_terms": ["<=", "四次"]
+  },
+  {
+    "id": "normalization",
+    "issue": "normalize(' A ') 返回方法对象而不是 'a'，为什么？",
+    "expected_citations": ["[normalize.py:3]"],
+    "expected_terms": ["lower", "括号"]
+  },
+  {
+    "id": "boolean_env",
+    "issue": "FEATURE_ENABLED=false 时 feature_enabled() 仍返回 True，为什么？",
+    "expected_citations": ["[config.py:6]"],
+    "expected_terms": ["false", "bool"]
+  },
+  {
+    "id": "sorting",
+    "issue": "sorted_users 返回 None，但列表确实被排序了，为什么？",
+    "expected_citations": ["[sorting.py:3]"],
+    "expected_terms": ["sort", "None"]
+  },
+  {
+    "id": "tax_rate",
+    "issue": "rate=8 时税后总价变成原价的 9 倍，为什么？",
+    "expected_citations": ["[tax.py:3]"],
+    "expected_terms": ["100", "8"]
   }
 ]

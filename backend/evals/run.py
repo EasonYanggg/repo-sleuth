@@ -6,10 +6,11 @@ Run from backend/: python -m evals.run [--live] [--output report.json]
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 
-from app.agent import investigate
-from app.demo import run_demo
+from app.agent import investigate_report
+from app.demo import run_demo_report
 from app.repository import Repository
 
 
@@ -26,18 +27,26 @@ def evaluate(live=False):
     for case in cases:
         events = []
         emit = lambda kind, title, detail: events.append({"kind": kind, "title": title, "detail": detail})
+        started = time.perf_counter()
         try:
-            answer = investigate(repo, case["issue"], emit) if live else run_demo(repo, case["id"], emit)
+            report = investigate_report(repo, case["issue"], emit) if live else run_demo_report(repo, case["id"], emit)
+            answer = report.render()
             checks = {
                 "expected_citations": all(citation in answer for citation in case["expected_citations"]),
                 "expected_terms": all(term in answer for term in case["expected_terms"]),
                 "tool_used": any(event["kind"] == "tool" for event in events),
                 "citations_verified": any(event["kind"] == "verification" and "已核验" in event["title"] for event in events),
+                "structured_report": bool(report.hypothesis and report.evidence and report.next_steps),
             }
-            results.append({"id": case["id"], "passed": all(checks.values()), "checks": checks, "tool_calls": sum(event["kind"] == "tool" for event in events), "answer": answer})
+            results.append({"id": case["id"], "passed": all(checks.values()), "checks": checks,
+                            "tool_calls": sum(event["kind"] == "tool" for event in events),
+                            "duration_ms": round((time.perf_counter() - started) * 1000, 1), "answer": answer})
         except Exception as exc:
-            results.append({"id": case["id"], "passed": False, "error": str(exc)})
-    return {"mode": "live" if live else "demo", "passed": sum(item["passed"] for item in results), "total": len(results), "cases": results}
+            results.append({"id": case["id"], "passed": False,
+                            "duration_ms": round((time.perf_counter() - started) * 1000, 1), "error": str(exc)})
+    return {"mode": "live" if live else "demo", "passed": sum(item["passed"] for item in results),
+            "total": len(results), "avg_tool_calls": round(sum(item.get("tool_calls", 0) for item in results) / len(results), 1),
+            "cases": results}
 
 
 def main():

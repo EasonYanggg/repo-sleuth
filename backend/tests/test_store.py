@@ -14,11 +14,23 @@ def test_runs_survive_store_reopen(tmp_path):
     assert second.list()[0]["id"] == "r1"
 
 
-def test_running_task_is_marked_interrupted_after_restart(tmp_path):
+def test_legacy_database_gains_report_column(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE runs (id TEXT PRIMARY KEY, status TEXT NOT NULL, repository TEXT NOT NULL, issue TEXT NOT NULL, demo INTEGER NOT NULL, scenario TEXT, answer TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+    store = RunStore(path)
+    store.create("r1", "/repo", "bug", True, "division")
+    store.finish("r1", "completed", "answer", {"hypothesis": "bug"})
+    assert store.get("r1")["report"]["hypothesis"] == "bug"
+
+
+def test_running_task_remains_available_for_recovery(tmp_path):
     path = tmp_path / "runs.sqlite"
     first = RunStore(path)
     first.create("pending", "/repo", "bug", True, "division")
     second = RunStore(path)
     run = second.get("pending")
-    assert run["status"] == "failed"
-    assert run["events"][-1]["title"] == "调查中断"
+    assert run["status"] == "running"
+    assert second.running()[0]["id"] == "pending"

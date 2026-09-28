@@ -4,7 +4,9 @@ import './style.css'
 import './enhancements.css'
 
 type Event = { time: string; kind: string; title: string; detail: string }
-type Run = { id: string; status: string; repository: string; issue: string; demo: boolean; scenario: string | null; events: Event[]; answer: string | null; created_at: string }
+type Evidence = { citation: string; quote: string; explanation: string }
+type Report = { hypothesis: string; evidence: Evidence[]; alternatives: string[]; confidence: '低' | '中' | '高'; next_steps: string[]; limitations: string[] }
+type Run = { id: string; status: string; repository: string; issue: string; demo: boolean; scenario: string | null; events: Event[]; answer: string | null; report: Report | null; created_at: string }
 type RunSummary = Pick<Run, 'id' | 'status' | 'issue' | 'demo' | 'created_at' | 'scenario'>
 type Health = { status: string; api_key_configured: boolean; demo_repository: string }
 type Scenario = { id: string; title: string; issue: string }
@@ -90,7 +92,7 @@ function App() {
   return <div className="app">
     <header><div className="brand"><span className="brand-icon">⌁</span><span>REPO SLEUTH</span></div><span className="badge">EVIDENCE-FIRST · AGENT WORKBENCH</span></header>
     <main>
-      <section className="hero"><div className="eyebrow">CODE INVESTIGATION AGENT / V0.2</div><h1>从 Bug 描述到可核验的代码证据。</h1><p>Agent 自主检索仓库，保留完整调查轨迹；结论中的代码行号必须能在真实工具结果中找到。</p></section>
+      <section className="hero"><div className="eyebrow">CODE INVESTIGATION AGENT / V0.3 · LANGGRAPH</div><h1>从 Bug 描述到可核验的代码证据。</h1><p>状态图驱动调查、校验与补查；持久化检查点支持中断恢复。每条证据都关联实际观察过的代码原文。</p></section>
       <div className="layout">
         <div className="left-column">
           <section className="card form-card"><div className="section-label">01 / 发起调查</div><h2>调查任务</h2>
@@ -111,7 +113,15 @@ function App() {
             {!run && <div className="empty"><div className="empty-icon">⌕</div><p>发起调查或打开历史任务，这里会显示工具调用、返回内容和引用校验。</p></div>}
             {run && <><div className="metrics"><span><strong>{toolCount}</strong> 次工具调用</span><span><strong>{verified ? '✓' : '—'}</strong> 引用校验</span><span><strong>{run.demo ? 'DEMO' : 'LIVE'}</strong> 运行模式</span></div><div className="events">{timeline.map((event, i) => <article className={`event ${event.kind}`} key={i}><div className="event-marker">{event.kind === 'error' ? '!' : event.kind === 'verification' ? '✓' : event.kind === 'tool' ? '→' : '·'}</div><div><div className="event-title">{event.title}<time>{new Date(event.time).toLocaleTimeString('zh-CN')}</time></div><pre>{event.detail}</pre></div></article>)}{run.status === 'running' && <div className="working"><span className="spinner" />Agent 正在分析…</div>}</div></>}
           </section>
-          {run?.answer && <section className="card report-card"><div className="section-label">04 / 证据报告</div><div className="report-head"><h2>调查结论</h2><span className="verified-badge">✓ 引用已核验</span></div><p className="report-text">{run.answer}</p><p className="report-note">引用只代表该行曾被工具读取或搜索到；最终判断仍需人工审查。</p></section>}
+          {run?.answer && <section className="card report-card"><div className="section-label">04 / 证据报告</div><div className="report-head"><h2>调查结论</h2><span className="verified-badge">✓ 原文已核验</span></div>
+            {run.report ? <div className="structured-report">
+              <div className="report-section"><span className="report-label">根因假设 · 置信度 {run.report.confidence}</span><p>{run.report.hypothesis}</p></div>
+              <div className="report-section"><span className="report-label">支持证据</span>{run.report.evidence.map((item, index) => <div className="evidence-item" key={`${item.citation}-${index}`}><code>{item.citation}</code><p>{item.explanation}</p><blockquote>{item.quote}</blockquote></div>)}</div>
+              <div className="report-section"><span className="report-label">其他可能</span><p>{run.report.alternatives.length ? run.report.alternatives.join('；') : '暂无'}</p></div>
+              <div className="report-section"><span className="report-label">下一步验证</span><p>{run.report.next_steps.join('；')}</p></div>
+              {run.report.limitations.length > 0 && <div className="report-section"><span className="report-label">局限</span><p>{run.report.limitations.join('；')}</p></div>}
+            </div> : <p className="report-text">{run.answer}</p>}
+            <p className="report-note">引用与摘录校验只证明来源一致，不证明根因推理必然正确；仍需人工审查。</p></section>}
         </div>
       </div>
       <footer><span>READ · SEARCH · VERIFY · REASON</span><span>所有仓库操作均为只读</span></footer>
