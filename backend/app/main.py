@@ -1,7 +1,7 @@
 import os
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
@@ -9,50 +9,53 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .agent import investigate
+from .demo import SCENARIOS, run_demo
 from .repository import Repository, RepositoryError
+from .store import RunStore
 
 
-app = FastAPI(title="Repo Sleuth API", version="0.1.0")
+app = FastAPI(title="Repo Sleuth API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["*"], allow_credentials=False)
-RUNS: dict[str, dict] = {}
-LOCK = threading.Lock()
 DEMO_REPO = Path(__file__).resolve().parents[2] / "demo-repo"
+STORE = RunStore(Path(os.getenv("REPO_SLEUTH_DB", str(Path(__file__).resolve().parents[1] / "data" / "runs.sqlite"))))
 
 
 class RunRequest(BaseModel):
     issue: str = Field(min_length=8, max_length=2000)
     repository: str = Field(min_length=1)
     demo: bool = False
+    scenario: Literal["division", "threshold"] = "division"
 
 
 def event(run_id: str, kind: str, title: str, detail: str) -> None:
-    with LOCK:
-        RUNS[run_id]["events"].append({"time": datetime.now(timezone.utc).isoformat(), "kind": kind, "title": title, "detail": detail})
+    STORE.event(run_id, kind, title, detail)
 
 
-def execute(run_id: str, repo: Repository, issue: str, demo: bool) -> None:
+def execute(run_id: str, repo: Repository, issue: str, demo: bool, scenario: str) -> None:
     try:
         if demo:
-            event(run_id, "tool", "调用 list_files", "{}")
-            event(run_id, "result", "list_files 返回", repo.list_files())
-            event(run_id, "tool", "调用 read_file", '{"path":"calculator.py"}')
-            event(run_id, "result", "read_file 返回", repo.read_file("calculator.py"))
-            answer = "根因假设：calculator.py 第 5 行使用 int(a / b)，将非整除结果截断。例如 divide(5, 2) 得到 2，而预期为 2.5。建议改为 a / b，再针对非整除和除零输入补充测试。置信度：高。"
-            event(run_id, "report", "调查结论（演示数据）", answer)
+            answer = run_demo(repo, scenario, lambda kind, title, detail: event(run_id, kind, title, detail))
         else:
             answer = investigate(repo, issue, lambda kind, title, detail: event(run_id, kind, title, detail))
-        with LOCK:
-            RUNS[run_id]["answer"] = answer
-            RUNS[run_id]["status"] = "completed"
+        STORE.finish(run_id, "completed", answer)
     except Exception as exc:
         event(run_id, "error", "调查失败", str(exc))
-        with LOCK:
-            RUNS[run_id]["status"] = "failed"
+        STORE.finish(run_id, "failed")
 
 
 @app.get("/api/health")
 def health():
     return {"status": "ok", "api_key_configured": bool(os.getenv("OPENAI_API_KEY")), "demo_repository": str(DEMO_REPO)}
+
+
+@app.get("/api/scenarios")
+def scenarios():
+    return [{"id": key, "title": value["title"], "issue": value["issue"]} for key, value in SCENARIOS.items()]
+
+
+@app.get("/api/runs")
+def list_runs():
+    return STORE.list()
 
 
 @app.post("/api/runs", status_code=202)
@@ -64,16 +67,14 @@ def create_run(request: RunRequest):
     except RepositoryError as exc:
         raise HTTPException(400, str(exc)) from exc
     run_id = uuid4().hex
-    with LOCK:
-        RUNS[run_id] = {"id": run_id, "status": "running", "repository": str(repo.root), "issue": request.issue, "demo": request.demo, "events": [], "answer": None}
-    threading.Thread(target=execute, args=(run_id, repo, request.issue, request.demo), daemon=True).start()
+    STORE.create(run_id, str(repo.root), request.issue, request.demo, request.scenario if request.demo else None)
+    threading.Thread(target=execute, args=(run_id, repo, request.issue, request.demo, request.scenario), daemon=True).start()
     return {"id": run_id}
 
 
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str):
-    with LOCK:
-        run = RUNS.get(run_id)
-        if run is None:
-            raise HTTPException(404, "任务不存在")
-        return dict(run, events=list(run["events"]))
+    run = STORE.get(run_id)
+    if run is None:
+        raise HTTPException(404, "任务不存在")
+    return run

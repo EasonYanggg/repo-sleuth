@@ -1,0 +1,14 @@
+[
+  {
+    "id": "division",
+    "issue": "divide(5, 2) 返回 2，但预期是 2.5。请定位原因。",
+    "expected_citations": ["[calculator.py:5]"],
+    "expected_terms": ["int", "截断"]
+  },
+  {
+    "id": "threshold",
+    "issue": "订单金额正好为 100 时仍收取运费，但业务规则是满 100 免运费。请定位原因。",
+    "expected_citations": ["[shipping.py:3]"],
+    "expected_terms": ["100", "大于"]
+  }
+]
