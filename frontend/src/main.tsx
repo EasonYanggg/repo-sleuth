@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
-import './enhancements.css'
 
 type Event = { time: string; kind: string; title: string; detail: string }
 type Evidence = { citation: string; quote: string; explanation: string }
@@ -10,7 +9,24 @@ type Run = { id: string; status: string; repository: string; issue: string; demo
 type RunSummary = Pick<Run, 'id' | 'status' | 'issue' | 'demo' | 'created_at' | 'scenario'>
 type Health = { status: string; api_key_configured: boolean; demo_repository: string }
 type Scenario = { id: string; title: string; issue: string }
-const statusText: Record<string, string> = { running: '进行中', completed: '已完成', failed: '失败' }
+
+const statusText: Record<string, string> = { running: '调查中', completed: '已完成', failed: '失败' }
+const flow = [
+  { number: '01', title: '检索仓库', detail: '定位相关代码与调用路径' },
+  { number: '02', title: '形成假设', detail: '把观察连接成因果解释' },
+  { number: '03', title: '核验证据', detail: '引用与原文逐项对照' },
+]
+
+function BrandMark() {
+  return <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+    <path d="M6 20h8l4-9 5 18 4-9h7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 8h5M8 8v5M32 8h-5M32 8v5M8 32h5M8 32v-5M32 32h-5M32 32v-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+}
+
+function ArrowIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 15 15 4M6 4h9v9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+}
 
 function App() {
   const [health, setHealth] = useState<Health | null>(null)
@@ -85,46 +101,103 @@ function App() {
     if (selected) setIssue(selected.issue)
   }
 
+  function changeMode(nextDemo: boolean) {
+    setDemo(nextDemo)
+    setError('')
+    if (nextDemo) selectScenario(scenario)
+  }
+
   const toolCount = run?.events.filter(item => item.kind === 'tool').length ?? 0
   const verified = run?.events.some(item => item.kind === 'verification' && item.title.includes('已核验')) ?? false
   const timeline = run?.events.filter(item => item.kind !== 'report') ?? []
+  const runActive = run?.status === 'running'
 
-  return <div className="app">
-    <header><div className="brand"><span className="brand-icon">⌁</span><span>REPO SLEUTH</span></div><span className="badge">EVIDENCE-FIRST · AGENT WORKBENCH</span></header>
-    <main>
-      <section className="hero"><div className="eyebrow">CODE INVESTIGATION AGENT / V0.3 · LANGGRAPH</div><h1>从 Bug 描述到可核验的代码证据。</h1><p>状态图驱动调查、校验与补查；持久化检查点支持中断恢复。每条证据都关联实际观察过的代码原文。</p></section>
-      <div className="layout">
+  return <div className="app-shell">
+    <header className="topbar">
+      <div className="topbar-inner">
+        <div className="brand"><span className="brand-mark"><BrandMark /></span><span className="brand-copy"><strong>REPO SLEUTH</strong><small>CODE FORENSICS LAB</small></span></div>
+        <div className="header-right"><span className="header-version">WORKBENCH / 0.3</span><span className={`connection-pill ${health ? 'online' : 'offline'}`}><i />{health ? '本地服务已连接' : '等待后端连接'}</span></div>
+      </div>
+    </header>
+
+    <main className="page-content">
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <div className="eyebrow"><span className="eyebrow-line" />EVIDENCE-DRIVEN CODE INVESTIGATION</div>
+          <h1 id="hero-title">让每一个判断，<br /><span>都有代码作证。</span></h1>
+          <p>输入 Bug 现象，Agent 沿着代码寻找线索。调查步骤可回看，结论附带可核验的文件、行号与原文。</p>
+          <div className="hero-tags"><span>LANGGRAPH WORKFLOW</span><span>READ-ONLY TOOLS</span><span>VERIFIED CITATIONS</span></div>
+        </div>
+        <div className="flow-card" aria-label="调查流程">
+          <div className="flow-card-head"><span>INVESTIGATION FLOW</span><span className={`flow-live ${health ? '' : 'offline'}`}><i /> {health ? 'SYSTEM READY' : 'API OFFLINE'}</span></div>
+          <div className="flow-list">{flow.map((step, index) => <div className="flow-step" key={step.number}>
+            <span className={`flow-index ${index === 0 ? 'current' : ''}`}>{step.number}</span>
+            <div><strong>{step.title}</strong><small>{step.detail}</small></div>
+            <span className="flow-arrow">↗</span>
+          </div>)}</div>
+          <div className="flow-card-foot"><span>OBSERVE</span><span>REASON</span><span>VERIFY</span></div>
+        </div>
+      </section>
+
+      <div className="workspace-grid">
         <div className="left-column">
-          <section className="card form-card"><div className="section-label">01 / 发起调查</div><h2>调查任务</h2>
-            <label className="toggle"><input type="checkbox" checked={demo} onChange={e => setDemo(e.target.checked)} /><span>确定性演示 · 无需 API Key</span></label>
-            {demo && <><label htmlFor="scenario">演示场景</label><select id="scenario" value={scenario} onChange={e => selectScenario(e.target.value)}>{scenarios.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></>}
-            {!demo && <><label htmlFor="repo">本地仓库路径</label><input id="repo" value={repository} onChange={e => setRepository(e.target.value)} placeholder="/absolute/path/to/repo" /></>}
-            <label htmlFor="issue">问题描述</label><textarea id="issue" value={issue} onChange={e => setIssue(e.target.value)} rows={5} disabled={demo} />
-            <button className="primary-button" onClick={start} disabled={submitting || !!(run && run.status === 'running') || issue.trim().length < 8}>{submitting ? '正在创建…' : run?.status === 'running' ? '正在调查…' : '开始调查'} <span>↗</span></button>
-            <p className="hint">{demo ? '演示会运行真实读取工具，并校验证据引用；模型调用仅在真实模式发生。' : health?.api_key_configured ? '真实模式已就绪：只读仓库，不执行代码或修改文件。' : '真实模式需在后端配置 OPENAI_API_KEY。'}</p>
-            {error && <div className="error">{error}</div>}
+          <section className="panel form-panel" aria-labelledby="new-run-title">
+            <div className="panel-heading"><div><span className="section-kicker">01 / NEW INVESTIGATION</span><h2 id="new-run-title">发起调查</h2></div><span className="panel-symbol">⌕</span></div>
+            <p className="panel-intro">选择调查模式，给 Agent 一个明确的问题。</p>
+
+            <div className="field-group"><span className="field-label">运行模式</span>
+              <div className="mode-switch" role="group" aria-label="运行模式">
+                <button type="button" className={demo ? 'active' : ''} aria-pressed={demo} onClick={() => changeMode(true)}><strong>演示模式</strong><small>无需 API Key</small></button>
+                <button type="button" className={!demo ? 'active' : ''} aria-pressed={!demo} onClick={() => changeMode(false)}><strong>真实调查</strong><small>调用模型</small></button>
+              </div>
+            </div>
+
+            {demo ? <div className="field-group"><label className="field-label" htmlFor="scenario">预设故障场景</label><div className="select-wrap"><select id="scenario" value={scenario} onChange={e => selectScenario(e.target.value)}>{scenarios.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select><span aria-hidden="true">⌄</span></div></div>
+              : <div className="field-group"><label className="field-label" htmlFor="repo">本地仓库路径</label><input id="repo" value={repository} onChange={e => setRepository(e.target.value)} placeholder="/absolute/path/to/repo" spellCheck={false} /></div>}
+
+            <div className="field-group"><label className="field-label" htmlFor="issue">问题描述</label><textarea id="issue" value={issue} onChange={e => setIssue(e.target.value)} rows={5} readOnly={demo} aria-describedby="issue-help" /></div>
+            <p className="field-help" id="issue-help">{demo ? '演示场景会使用真实只读工具，结论由预设脚本生成。' : health?.api_key_configured ? '模型已就绪；只读取仓库，不运行或修改代码。' : '真实调查需要在后端配置 OPENAI_API_KEY。'}</p>
+            {error && <div className="error-banner" role="alert"><span>!</span>{error}</div>}
+            <button className="start-button" type="button" onClick={start} disabled={submitting || runActive || issue.trim().length < 8}><span>{submitting ? '正在创建任务…' : runActive ? '调查进行中…' : '开始调查'}</span><ArrowIcon /></button>
+            <div className="form-footnote"><span className="small-lock">◇</span> 工具仅可读取仓库，不会执行代码或修改文件</div>
           </section>
-          <section className="card history-card"><div className="section-label">02 / 调查档案</div><h2>最近任务</h2>
-            {history.length === 0 ? <p className="muted">还没有调查记录。</p> : <div className="history-list">{history.map(item => <button type="button" className={`history-item ${run?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => openRun(item.id)}><span className="history-title">{item.issue}</span><span className="history-meta">{item.demo ? '演示' : '真实'} · {statusText[item.status] || item.status} · {new Date(item.created_at).toLocaleString('zh-CN')}</span></button>)}</div>}
+
+          <section className="panel history-panel" aria-labelledby="history-title">
+            <div className="panel-heading compact"><div><span className="section-kicker">02 / CASE ARCHIVE</span><h2 id="history-title">调查档案</h2></div><span className="count-badge">{history.length.toString().padStart(2, '0')}</span></div>
+            {history.length === 0 ? <div className="history-empty">还没有调查记录。完成首次调查后会显示在这里。</div> : <div className="history-list">{history.map(item => <button type="button" className={`history-item ${run?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => openRun(item.id)}>
+              <span className="history-top"><span className={`history-status ${item.status}`}><i />{statusText[item.status] || item.status}</span><span className="history-date">{new Date(item.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></span>
+              <span className="history-title">{item.issue}</span><span className="history-mode">{item.demo ? 'DEMO / 预设演示' : 'LIVE / 模型调查'} <span aria-hidden="true">↗</span></span>
+            </button>)}</div>}
           </section>
         </div>
+
         <div className="right-column">
-          <section className="card timeline-card"><div className="section-label">03 / 行动轨迹</div><div className="timeline-head"><h2>调查过程</h2><span className={`status ${run?.status || 'idle'}`}>{run ? statusText[run.status] || run.status : '待开始'}</span></div>
-            {!run && <div className="empty"><div className="empty-icon">⌕</div><p>发起调查或打开历史任务，这里会显示工具调用、返回内容和引用校验。</p></div>}
-            {run && <><div className="metrics"><span><strong>{toolCount}</strong> 次工具调用</span><span><strong>{verified ? '✓' : '—'}</strong> 引用校验</span><span><strong>{run.demo ? 'DEMO' : 'LIVE'}</strong> 运行模式</span></div><div className="events">{timeline.map((event, i) => <article className={`event ${event.kind}`} key={i}><div className="event-marker">{event.kind === 'error' ? '!' : event.kind === 'verification' ? '✓' : event.kind === 'tool' ? '→' : '·'}</div><div><div className="event-title">{event.title}<time>{new Date(event.time).toLocaleTimeString('zh-CN')}</time></div><pre>{event.detail}</pre></div></article>)}{run.status === 'running' && <div className="working"><span className="spinner" />Agent 正在分析…</div>}</div></>}
+          <section className="panel timeline-panel" aria-labelledby="timeline-title">
+            <div className="panel-heading timeline-heading"><div><span className="section-kicker">03 / TRACE LOG</span><h2 id="timeline-title">调查轨迹</h2></div><span className={`run-status ${run?.status || 'idle'}`}><i />{run ? statusText[run.status] || run.status : '等待任务'}</span></div>
+            {!run ? <div className="trace-empty"><div className="trace-graphic"><span className="trace-ring one" /><span className="trace-ring two" /><span className="trace-core">⌕</span></div><h3>线索会在这里出现</h3><p>开始一次调查，或从左侧打开历史任务。工具调用、观察结果和验证过程都会按时间排列。</p><span className="empty-prompt">AWAITING INVESTIGATION</span></div>
+              : <><div className="trace-metrics"><div><small>TOOL CALLS</small><strong>{toolCount.toString().padStart(2, '0')}</strong></div><div><small>EVIDENCE CHECK</small><strong className={verified ? 'positive' : ''}>{verified ? 'PASSED' : 'PENDING'}</strong></div><div><small>RUN MODE</small><strong>{run.demo ? 'DEMO' : 'LIVE'}</strong></div></div>
+                <div className="events">{timeline.map((item, index) => <article className={`event event-${item.kind}`} key={`${item.time}-${index}`}>
+                  <span className="event-marker">{item.kind === 'error' ? '!' : item.kind === 'verification' ? '✓' : item.kind === 'tool' ? '↗' : item.kind === 'stage' ? '◇' : '·'}</span>
+                  <div className="event-body"><div className="event-top"><span className="event-kind">{item.kind === 'tool' ? 'TOOL CALL' : item.kind === 'result' ? 'OBSERVATION' : item.kind === 'verification' ? 'EVIDENCE CHECK' : item.kind === 'stage' ? 'WORKFLOW' : 'ERROR'}</span><time>{new Date(item.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></div>
+                    <details open={item.kind === 'verification' || item.kind === 'error'}><summary>{item.title}<span className="disclosure">⌄</span></summary><pre>{item.detail}</pre></details>
+                  </div>
+                </article>)}{runActive && <div className="working"><span className="spinner" />Agent 正在分析代码…</div>}</div>
+              </>}
           </section>
-          {run?.answer && <section className="card report-card"><div className="section-label">04 / 证据报告</div><div className="report-head"><h2>调查结论</h2><span className="verified-badge">✓ 原文已核验</span></div>
+
+          {run?.answer && <section className="panel report-panel" aria-labelledby="report-title">
+            <div className="panel-heading report-heading"><div><span className="section-kicker">04 / EVIDENCE REPORT</span><h2 id="report-title">调查结论</h2></div><span className="verified-badge">✓ 来源已核验</span></div>
             {run.report ? <div className="structured-report">
-              <div className="report-section"><span className="report-label">根因假设 · 置信度 {run.report.confidence}</span><p>{run.report.hypothesis}</p></div>
-              <div className="report-section"><span className="report-label">支持证据</span>{run.report.evidence.map((item, index) => <div className="evidence-item" key={`${item.citation}-${index}`}><code>{item.citation}</code><p>{item.explanation}</p><blockquote>{item.quote}</blockquote></div>)}</div>
-              <div className="report-section"><span className="report-label">其他可能</span><p>{run.report.alternatives.length ? run.report.alternatives.join('；') : '暂无'}</p></div>
-              <div className="report-section"><span className="report-label">下一步验证</span><p>{run.report.next_steps.join('；')}</p></div>
-              {run.report.limitations.length > 0 && <div className="report-section"><span className="report-label">局限</span><p>{run.report.limitations.join('；')}</p></div>}
-            </div> : <p className="report-text">{run.answer}</p>}
-            <p className="report-note">引用与摘录校验只证明来源一致，不证明根因推理必然正确；仍需人工审查。</p></section>}
+              <div className="hypothesis-card"><div className="report-label-row"><span>ROOT CAUSE HYPOTHESIS</span><span className={`confidence confidence-${run.report.confidence}`}>置信度 · {run.report.confidence}</span></div><p>{run.report.hypothesis}</p></div>
+              <div className="report-section"><div className="report-section-title"><span className="report-number">01</span><h3>支持证据</h3><span className="report-count">{run.report.evidence.length} SOURCES</span></div><div className="evidence-list">{run.report.evidence.map((item, index) => <div className="evidence-item" key={`${item.citation}-${index}`}><div className="evidence-top"><code>{item.citation}</code><span>VERIFIED SOURCE</span></div><p>{item.explanation}</p><blockquote>{item.quote}</blockquote></div>)}</div></div>
+              <div className="report-bottom-grid"><div className="report-section"><div className="report-section-title"><span className="report-number">02</span><h3>其他可能</h3></div><p>{run.report.alternatives.length ? run.report.alternatives.join('；') : '暂无其他已识别的假设。'}</p></div><div className="report-section"><div className="report-section-title"><span className="report-number">03</span><h3>下一步验证</h3></div><p>{run.report.next_steps.join('；')}</p></div></div>
+              {run.report.limitations.length > 0 && <div className="limitations"><strong>调查局限</strong><p>{run.report.limitations.join('；')}</p></div>}
+            </div> : <p className="legacy-report">{run.answer}</p>}
+            <p className="report-note">引用与摘录校验只证明来源一致，不证明根因推理必然正确；最终判断仍需人工审查。</p>
+          </section>}
         </div>
       </div>
-      <footer><span>READ · SEARCH · VERIFY · REASON</span><span>所有仓库操作均为只读</span></footer>
+      <footer className="footer"><span>REPO SLEUTH <i>©</i> 2026</span><span>OBSERVE <b>→</b> REASON <b>→</b> VERIFY</span><span>BUILT FOR EVIDENCE, NOT GUESSWORK.</span></footer>
     </main>
   </div>
 }
